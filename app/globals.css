@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Fallback color lives on <html> (the canvas, behind the -z-10 scene layer).
+   <body> MUST stay transparent — an opaque body background paints over a
+   negative z-index fixed element and hides the whole scene. */
+html {
+  background: #0b1026;
+  min-height: 100%;
+}
+
+body {
+  color: #1e293b; /* slate-800 default; page text adapts per sky phase */
+  background: transparent;
+  min-height: 100%;
+}
+
+/* Loading skeleton shimmer (warm tint). */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.25) 25%,
+    rgba(255, 255, 255, 0.6) 37%,
+    rgba(255, 255, 255, 0.25) 63%
+  );
+  background-size: 800px 100%;
+}
+
+/* Respect reduced-motion preference. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
