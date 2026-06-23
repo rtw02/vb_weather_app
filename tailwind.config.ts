@@ -52,6 +52,26 @@ const config: Config = {
           "90%": { opacity: "1" },
           "100%": { transform: "translate(1040px, 370px) rotate(720deg)", opacity: "0" },
         },
+        flap: {
+          "0%, 100%": { transform: "scaleX(1) skewY(0deg)" },
+          "50%": { transform: "scaleX(0.7) skewY(-6deg)" },
+        },
+        bob: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-6px)" },
+        },
+        rain: {
+          "0%": { transform: "translateY(-10vh)" },
+          "100%": { transform: "translateY(110vh)" },
+        },
+        ballfall: {
+          "0%": { transform: "translateY(-12vh) rotate(0deg)", opacity: "0" },
+          "8%": { opacity: "1" },
+          "100%": { transform: "translateY(112vh) rotate(540deg)", opacity: "1" },
+        },
+        spin: {
+          to: { transform: "rotate(360deg)" },
+        },
       },
       animation: {
         "fade-in-up": "fadeInUp 0.45s ease-out both",
@@ -63,6 +83,9 @@ const config: Config = {
         sway: "sway 6s ease-in-out infinite",
         "sway-slow": "swaySlow 9s ease-in-out infinite",
         arc: "arc 9s ease-in-out infinite",
+        flap: "flap 1.3s ease-in-out infinite",
+        bob: "bob 1.1s ease-in-out infinite",
+        "spin-once": "spin 0.8s ease-in-out",
       },
     },
   },

@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, Plus_Jakarta_Sans } from "next/font/google";
 import "./globals.css";
 
@@ -21,6 +21,15 @@ export const metadata: Metadata = {
   title: "Volleyball Weather Calendar",
   description:
     "Stoplight calendar showing ideal outdoor volleyball weather (no rain, wind under 20 mph) for the next ~16 days.",
+  appleWebApp: {
+    capable: true,
+    title: "VB Weather",
+    statusBarStyle: "black-translucent",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#2a8fe0",
 };
 
 export default function RootLayout({

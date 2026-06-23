@@ -2,6 +2,9 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Phase } from "@/lib/daytime";
+import type { Mood } from "@/lib/funstats";
+
+export type Court = "grass" | "beach";
 
 // Deterministic star field (avoids hydration mismatch from Math.random).
 const STARS = Array.from({ length: 46 }, (_, i) => {
@@ -64,11 +67,45 @@ function Tree({
   );
 }
 
-export default function SceneBackground({ phase }: { phase: Phase }) {
+export default function SceneBackground({
+  phase,
+  mood = "clear",
+  court = "grass",
+  ballRain = false,
+}: {
+  phase: Phase;
+  mood?: Mood;
+  court?: Court;
+  ballRain?: boolean;
+}) {
   const celestial = phase.sun ?? phase.moon;
   const isMoon = !!phase.moon && !phase.sun;
   const cx = celestial ? (celestial.xPct / 100) * 1200 : 0;
   const cy = celestial ? (celestial.yPct / 100) * 600 : 0;
+
+  // Beach swaps the lawn for sand; grass uses the phase's grass colors.
+  const ground =
+    court === "beach"
+      ? { top: "#e9d3a3", bottom: "#cdae74" }
+      : { top: phase.grassTop, bottom: phase.grassBottom };
+
+  // Click the sun/moon to spin it (easter egg). Bump key to restart the anim.
+  const [spinKey, setSpinKey] = useState(0);
+
+  // Windier days = more, faster clouds; rainy = overcast.
+  const cloudDefs =
+    mood === "wind"
+      ? [
+          { y: 110, s: 1.3, dur: 45, delay: 0 },
+          { y: 200, s: 0.9, dur: 38, delay: -12 },
+          { y: 70, s: 0.7, dur: 55, delay: -30 },
+          { y: 250, s: 1.0, dur: 42, delay: -22 },
+        ]
+      : [
+          { y: 110, s: 1.2, dur: 95, delay: 0 },
+          { y: 210, s: 0.85, dur: 72, delay: -25 },
+          { y: 70, s: 0.65, dur: 125, delay: -60 },
+        ];
 
   // Pause every CSS animation when the tab is hidden or the scene is scrolled
   // out of view — no wasted repaints / battery while nothing is visible.
@@ -108,7 +145,7 @@ export default function SceneBackground({ phase }: { phase: Phase }) {
       <div
         className="absolute inset-0 transition-[background] duration-1000 ease-in-out"
         style={{
-          background: `linear-gradient(180deg, ${phase.skyTop} 0%, ${phase.skyBottom} 46%, ${phase.waterTint} 55%, ${phase.waterTint} 66%, ${phase.boardwalkTint} 69%, ${phase.boardwalkTint} 71%, ${phase.grassTop} 74%, ${phase.grassBottom} 100%)`,
+          background: `linear-gradient(180deg, ${phase.skyTop} 0%, ${phase.skyBottom} 46%, ${phase.waterTint} 55%, ${phase.waterTint} 66%, ${phase.boardwalkTint} 69%, ${phase.boardwalkTint} 71%, ${ground.top} 74%, ${ground.bottom} 100%)`,
         }}
       />
 
@@ -154,16 +191,38 @@ export default function SceneBackground({ phase }: { phase: Phase }) {
         {celestial && (
           <g>
             <circle cx={cx} cy={cy} r="150" fill="url(#glow)" />
-            <circle cx={cx} cy={cy} r="46" fill={celestial.color} />
-            {isMoon && <circle cx={cx + 18} cy={cy - 6} r="40" fill={phase.skyTop} />}
+            {/* clickable, spins on click (pointer-events re-enabled here only) */}
+            <g
+              key={spinKey}
+              onClick={() => setSpinKey((k) => k + 1)}
+              className={spinKey ? "animate-spin-once" : ""}
+              style={{ transformOrigin: `${cx}px ${cy}px`, pointerEvents: "auto", cursor: "pointer" }}
+            >
+              <circle cx={cx} cy={cy} r="46" fill={celestial.color} />
+              {isMoon && <circle cx={cx + 18} cy={cy - 6} r="40" fill={phase.skyTop} />}
+              {/* sun rays on great days */}
+              {!isMoon && mood === "great" &&
+                Array.from({ length: 12 }).map((_, i) => {
+                  const a = (i / 12) * Math.PI * 2;
+                  return (
+                    <line
+                      key={i}
+                      x1={cx + Math.cos(a) * 58}
+                      y1={cy + Math.sin(a) * 58}
+                      x2={cx + Math.cos(a) * 76}
+                      y2={cy + Math.sin(a) * 76}
+                      stroke={celestial.color}
+                      strokeWidth="4"
+                      strokeLinecap="round"
+                      opacity={0.7}
+                    />
+                  );
+                })}
+            </g>
           </g>
         )}
 
-        {[
-          { y: 110, s: 1.2, dur: 95, delay: 0 },
-          { y: 210, s: 0.85, dur: 72, delay: -25 },
-          { y: 70, s: 0.65, dur: 125, delay: -60 },
-        ].map((c, i) => (
+        {cloudDefs.map((c, i) => (
           <g
             key={i}
             className="animate-drift"
@@ -269,9 +328,10 @@ export default function SceneBackground({ phase }: { phase: Phase }) {
         viewBox="0 0 1200 160"
         preserveAspectRatio="xMidYMax meet"
       >
-        {MID_TREES.map((t, i) => (
-          <Tree key={i} x={t.x} y={t.y} s={t.s} fill={phase.foliageTint} trunk={t.s > 0.5} />
-        ))}
+        {court === "grass" &&
+          MID_TREES.map((t, i) => (
+            <Tree key={i} x={t.x} y={t.y} s={t.s} fill={phase.foliageTint} trunk={t.s > 0.5} />
+          ))}
       </svg>
 
       {/* 7. Framing canopy trees in the top corners (gentle sway). */}
@@ -323,6 +383,25 @@ export default function SceneBackground({ phase }: { phase: Phase }) {
           <rect x={307} y={162} width={586} height={12} fill="#ffffff" />
           <rect x={307} y={372} width={586} height={9} fill="#eef0f2" />
           <rect x={307} y={174} width={586} height={198} fill="url(#netMesh)" />
+          {/* pennant flag on the left pole — flaps faster when windy */}
+          <g style={{ transformOrigin: "314px 150px" }} className="animate-flap">
+            <path d="M314 150 L360 160 L314 172 Z" fill="#ef4444" />
+          </g>
+        </g>
+
+        {/* two players bumping a ball beside the net */}
+        <g fill="#3a3a3a" opacity={0.85}>
+          <g className="animate-bob" style={{ transformOrigin: "180px 430px" }}>
+            <circle cx={180} cy={392} r={13} />
+            <rect x={172} y={405} width={16} height={40} rx={7} />
+            <rect x={166} y={410} width={26} height={9} rx={4} transform="rotate(-25 180 414)" />
+          </g>
+          <g className="animate-bob" style={{ transformOrigin: "1020px 430px", animationDelay: "0.5s" }}>
+            <circle cx={1020} cy={392} r={13} />
+            <rect x={1012} y={405} width={16} height={40} rx={7} />
+            <rect x={1008} y={410} width={26} height={9} rx={4} transform="rotate(25 1020 414)" />
+          </g>
+          <circle cx={600} cy={330} r={9} fill="#f8f5ef" stroke="#c9a24a" strokeWidth={1} className="animate-bob" />
         </g>
 
         <g className="animate-arc">
@@ -335,6 +414,47 @@ export default function SceneBackground({ phase }: { phase: Phase }) {
           />
         </g>
       </svg>
+
+      {/* Rainy mood — falling rain streaks. */}
+      {mood === "rain" && (
+        <div className="absolute inset-0">
+          {Array.from({ length: 60 }).map((_, i) => (
+            <span
+              key={i}
+              className="animate-rain absolute block w-px bg-white/35"
+              style={{
+                left: `${(i * 53) % 100}%`,
+                height: `${10 + (i % 5) * 4}px`,
+                animationDuration: `${0.6 + (i % 4) * 0.15}s`,
+                animationDelay: `${(i % 10) * 0.12}s`,
+                animationTimingFunction: "linear",
+                animationIterationCount: "infinite",
+              }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Konami easter egg — raining volleyballs. */}
+      {ballRain && (
+        <div className="absolute inset-0">
+          {Array.from({ length: 40 }).map((_, i) => (
+            <span
+              key={i}
+              className="animate-ballfall absolute text-2xl"
+              style={{
+                left: `${(i * 37) % 100}%`,
+                animationDuration: `${2 + (i % 5) * 0.5}s`,
+                animationDelay: `${(i % 8) * 0.25}s`,
+                animationTimingFunction: "linear",
+                animationIterationCount: "infinite",
+              }}
+            >
+              🏐
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
