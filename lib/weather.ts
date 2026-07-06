@@ -1,13 +1,22 @@
 // Open-Meteo forecast fetch + stoplight classification.
 // No API key required; CORS-enabled so we call it straight from the browser.
+//
+// Split in two: fetchRaw() gets (and caches) the raw hourly series keyed by
+// coords + units; classifyDays() turns it into stoplight days using the user's
+// Settings. This lets settings changes (window, temp, wind, daylight) reclassify
+// instantly with no refetch — only a units change re-hits the network.
+
+import type { Settings } from "./settings";
 
 export type DayColor = "green" | "yellow" | "red";
 
 export interface HourWeather {
   hour: number; // local hour of day (e.g. 17)
-  wind: number; // mph
+  wind: number; // in windUnit
   precip: number; // mm
-  good: boolean; // dry and wind < limit
+  temp: number; // in tempUnit
+  isDay: boolean;
+  good: boolean;
 }
 
 export interface DayWeather {
@@ -15,29 +24,34 @@ export interface DayWeather {
   color: DayColor;
   goodHours: number;
   totalHours: number;
-  maxWind: number; // mph, over the window
-  rainyHours: number; // hours with any precipitation in the window
-  hours: HourWeather[]; // per-hour breakdown across the window
+  maxWind: number;
+  rainyHours: number;
+  loTemp: number;
+  hiTemp: number;
+  hours: HourWeather[];
 }
 
-// Volleyball-playable window, in local hours of the day.
-// Weekdays 5-9pm -> hours 17,18,19,20. Weekends 2-9pm -> hours 14..20.
-const WEEKDAY_HOURS = [17, 18, 19, 20];
-const WEEKEND_HOURS = [14, 15, 16, 17, 18, 19, 20];
-
-const WIND_LIMIT_MPH = 20;
-
-interface OpenMeteoHourly {
+export interface RawHourly {
   time: string[];
   precipitation: number[];
   windspeed_10m: number[];
+  temperature_2m: number[];
+  is_day: number[];
 }
 
-function windowHoursFor(iso: string): number[] {
+function isWeekend(iso: string): boolean {
   const [y, m, d] = iso.split("-").map(Number);
-  const dow = new Date(y, m - 1, d).getDay(); // 0=Sun ... 6=Sat
-  const isWeekend = dow === 0 || dow === 6;
-  return isWeekend ? WEEKEND_HOURS : WEEKDAY_HOURS;
+  const dow = new Date(y, m - 1, d).getDay();
+  return dow === 0 || dow === 6;
+}
+
+function windowHours(iso: string, s: Settings): number[] {
+  const [start, end] = isWeekend(iso)
+    ? [s.weekendStart, s.weekendEnd]
+    : [s.weekdayStart, s.weekdayEnd];
+  const hours: number[] = [];
+  for (let h = start; h < end; h++) hours.push(h);
+  return hours;
 }
 
 // Majority-rules coloring on the share of good hours in the window.
@@ -49,80 +63,80 @@ function colorFor(ratio: number): DayColor {
 
 const CACHE_TTL_MS = 30 * 60 * 1000; // 30 min — forecast barely moves within the window
 
-// Read a fresh cached forecast for these coords from sessionStorage, if any.
-function readCache(key: string): Map<string, DayWeather> | null {
+function readCache(key: string): RawHourly | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.sessionStorage.getItem(key);
     if (!raw) return null;
-    const { t, entries } = JSON.parse(raw) as {
-      t: number;
-      entries: [string, DayWeather][];
-    };
+    const { t, hourly } = JSON.parse(raw) as { t: number; hourly: RawHourly };
     if (Date.now() - t > CACHE_TTL_MS) return null;
-    return new Map(entries);
+    return hourly;
   } catch {
     return null;
   }
 }
 
-function writeCache(key: string, map: Map<string, DayWeather>): void {
+function writeCache(key: string, hourly: RawHourly): void {
   if (typeof window === "undefined") return;
   try {
-    window.sessionStorage.setItem(
-      key,
-      JSON.stringify({ t: Date.now(), entries: [...map] })
-    );
+    window.sessionStorage.setItem(key, JSON.stringify({ t: Date.now(), hourly }));
   } catch {
-    /* quota / disabled storage — ignore, just skip caching */
+    /* quota / disabled storage — ignore */
   }
 }
 
-export async function fetchForecast(
+// Fetch the raw hourly series (cached per coords + units).
+export async function fetchRaw(
   lat: number,
-  lon: number
-): Promise<Map<string, DayWeather>> {
-  // Round coords so nearby re-adds share a cache entry.
-  const cacheKey = `vb-fc:${lat.toFixed(2)},${lon.toFixed(2)}`;
-  const cached = readCache(cacheKey);
+  lon: number,
+  tempUnit: "F" | "C",
+  windUnit: "mph" | "kmh"
+): Promise<RawHourly> {
+  const key = `vb-raw:${lat.toFixed(2)},${lon.toFixed(2)},${tempUnit},${windUnit}`;
+  const cached = readCache(key);
   if (cached) return cached;
 
+  const tu = tempUnit === "C" ? "celsius" : "fahrenheit";
+  const wu = windUnit === "kmh" ? "kmh" : "mph";
   const url =
     `https://api.open-meteo.com/v1/forecast` +
     `?latitude=${lat}&longitude=${lon}` +
-    `&hourly=precipitation,windspeed_10m` +
-    `&windspeed_unit=mph&forecast_days=16&timezone=auto`;
+    `&hourly=precipitation,windspeed_10m,temperature_2m,is_day` +
+    `&temperature_unit=${tu}&windspeed_unit=${wu}` +
+    `&forecast_days=16&timezone=auto`;
 
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Weather request failed (${res.status})`);
-  const data = (await res.json()) as { hourly: OpenMeteoHourly };
-
-  const classified = classifyDays(data.hourly);
-  writeCache(cacheKey, classified);
-  return classified;
+  const data = (await res.json()) as { hourly: RawHourly };
+  writeCache(key, data.hourly);
+  return data.hourly;
 }
 
-export function classifyDays(hourly: OpenMeteoHourly): Map<string, DayWeather> {
-  // Collect the relevant in-window hours per local date.
+export function classifyDays(
+  hourly: RawHourly,
+  s: Settings
+): Map<string, DayWeather> {
   const byDay = new Map<string, HourWeather[]>();
 
   for (let i = 0; i < hourly.time.length; i++) {
-    const stamp = hourly.time[i]; // e.g. "2026-06-22T17:00"
-    const [iso, hm] = stamp.split("T");
+    const [iso, hm] = hourly.time[i].split("T");
     const hour = parseInt(hm.slice(0, 2), 10);
-
-    if (!windowHoursFor(iso).includes(hour)) continue;
+    if (!windowHours(iso, s).includes(hour)) continue;
 
     const precip = hourly.precipitation[i] ?? 0;
     const wind = hourly.windspeed_10m[i] ?? 0;
+    const temp = hourly.temperature_2m[i] ?? 0;
+    const isDay = (hourly.is_day[i] ?? 1) === 1;
+
+    const good =
+      precip === 0 &&
+      wind < s.windLimit &&
+      temp >= s.tempMin &&
+      temp <= s.tempMax &&
+      (!s.requireDaylight || isDay);
 
     const list = byDay.get(iso) ?? [];
-    list.push({
-      hour,
-      wind: Math.round(wind),
-      precip,
-      good: precip === 0 && wind < WIND_LIMIT_MPH,
-    });
+    list.push({ hour, wind: Math.round(wind), precip, temp: Math.round(temp), isDay, good });
     byDay.set(iso, list);
   }
 
@@ -130,6 +144,7 @@ export function classifyDays(hourly: OpenMeteoHourly): Map<string, DayWeather> {
   for (const [iso, hours] of byDay) {
     if (hours.length === 0) continue;
     const good = hours.filter((h) => h.good).length;
+    const temps = hours.map((h) => h.temp);
     result.set(iso, {
       iso,
       color: colorFor(good / hours.length),
@@ -137,6 +152,8 @@ export function classifyDays(hourly: OpenMeteoHourly): Map<string, DayWeather> {
       totalHours: hours.length,
       maxWind: Math.max(...hours.map((h) => h.wind)),
       rainyHours: hours.filter((h) => h.precip > 0).length,
+      loTemp: Math.min(...temps),
+      hiTemp: Math.max(...temps),
       hours,
     });
   }

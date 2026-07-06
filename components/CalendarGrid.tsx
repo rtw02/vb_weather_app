@@ -11,12 +11,14 @@ export default function CalendarGrid({
   forecast,
   selected,
   bestIso,
+  onlyGreen,
   onSelect,
 }: {
   weeks: CalendarCell[][];
   forecast: Map<string, DayWeather>;
   selected: string | null;
   bestIso?: string | null;
+  onlyGreen?: boolean;
   onSelect: (iso: string) => void;
 }) {
   return (
@@ -35,6 +37,7 @@ export default function CalendarGrid({
             selected={selected === cell.iso}
             index={i}
             isBest={!!bestIso && cell.iso === bestIso && cell.inRange}
+            dimmed={!!onlyGreen}
             onSelect={onSelect}
           />
         ))}

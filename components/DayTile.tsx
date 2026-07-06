@@ -2,8 +2,14 @@
 
 import type { CalendarCell } from "@/lib/calendar";
 import type { DayWeather } from "@/lib/weather";
-import { dayEmoji } from "@/lib/funstats";
+import { dayEmoji, prettyDay } from "@/lib/funstats";
 import { spikeConfetti } from "@/lib/confetti";
+
+const COLOR_WORD: Record<string, string> = {
+  green: "all good",
+  yellow: "mixed weather",
+  red: "mostly bad",
+};
 
 // Gradient fills + matching glow per stoplight color.
 const COLOR_STYLE: Record<string, string> = {
@@ -20,6 +26,7 @@ export default function DayTile({
   selected,
   index,
   isBest,
+  dimmed,
   onSelect,
 }: {
   cell: CalendarCell;
@@ -27,6 +34,7 @@ export default function DayTile({
   selected: boolean;
   index: number;
   isBest?: boolean;
+  dimmed?: boolean;
   onSelect: (iso: string) => void;
 }) {
   const delay = { animationDelay: `${Math.min(index * 18, 400)}ms` };
@@ -60,11 +68,14 @@ export default function DayTile({
       onClick={handleClick}
       style={delay}
       title={`${weather.goodHours}/${weather.totalHours} good hours · max wind ${weather.maxWind} mph`}
-      className={`group relative aspect-square animate-pop-in rounded-lg p-1.5 text-left text-xs shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.06] hover:shadow-xl ${
+      aria-label={`${prettyDay(cell.iso)} — ${COLOR_WORD[weather.color]}${
+        isBest ? " (best day to play)" : ""
+      }, ${weather.goodHours} of ${weather.totalHours} playable hours, ${weather.loTemp} to ${weather.hiTemp} degrees, max wind ${weather.maxWind}`}
+      className={`group relative aspect-square animate-pop-in rounded-lg p-1.5 text-left text-xs shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:scale-[1.06] hover:shadow-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-900 focus-visible:ring-offset-2 focus-visible:ring-offset-white/70 ${
         COLOR_STYLE[weather.color]
-      } ${selected ? "ring-2 ring-slate-800/80 ring-offset-2 ring-offset-white/60" : ""} ${
-        isBest ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-white/60" : ""
-      }`}
+      } ${dimmed && weather.color !== "green" ? "opacity-30 saturate-50" : ""} ${
+        selected ? "ring-2 ring-slate-800/80 ring-offset-2 ring-offset-white/60" : ""
+      } ${isBest ? "ring-2 ring-amber-300 ring-offset-2 ring-offset-white/60" : ""}`}
     >
       <span className={cell.isToday ? "font-bold underline" : "font-semibold"}>
         {cell.dayOfMonth}
