@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { searchCity, type GeoResult } from "@/lib/geocode";
+import { searchPlaces, type GeoResult } from "@/lib/geocode";
 import type { SavedLocation } from "@/lib/locations";
 import { makeId } from "@/lib/locations";
 
@@ -35,7 +35,7 @@ export default function AddLocationBar({
     setBusy(true);
     const t = setTimeout(async () => {
       try {
-        const r = await searchCity(q);
+        const r = await searchPlaces(q);
         if (!cancelled) {
           setResults(r);
           setNoResults(r.length === 0);
@@ -149,7 +149,7 @@ export default function AddLocationBar({
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={onKeyDown}
             onFocus={() => results.length > 0 && setOpen(true)}
-            placeholder="Start typing a city…"
+            placeholder="Search a park, court, or city…"
             className={`min-h-[44px] w-full rounded-lg border border-slate-300 bg-white/90 px-3 text-base text-slate-800 placeholder-slate-400 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-300/50`}
           />
 
@@ -165,12 +165,22 @@ export default function AddLocationBar({
                     type="button"
                     onMouseEnter={() => setActive(i)}
                     onClick={() => addResult(r)}
-                    className={`flex min-h-[44px] w-full items-center justify-between px-3 text-left text-sm ${
+                    className={`flex min-h-[44px] w-full items-center gap-2 px-3 text-left text-sm ${
                       i === active ? "bg-sky-100 text-sky-900" : "text-slate-700"
                     }`}
                   >
-                    <span>{r.label}</span>
-                    <span className="text-xs tabular-nums text-slate-400">
+                    <span aria-hidden className="text-base leading-none">
+                      {r.kind === "park" ? "🏞️" : "📍"}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-medium">{r.label}</span>
+                      {r.detail && (
+                        <span className="block truncate text-xs text-slate-400">
+                          {r.detail}
+                        </span>
+                      )}
+                    </span>
+                    <span className="shrink-0 text-xs tabular-nums text-slate-400">
                       {r.lat.toFixed(2)}, {r.lon.toFixed(2)}
                     </span>
                   </button>
@@ -191,6 +201,9 @@ export default function AddLocationBar({
           {error}
         </p>
       )}
+      <p className="mt-2 text-[11px] text-slate-500">
+        Places © OpenStreetMap contributors
+      </p>
     </div>
   );
 }
