@@ -82,3 +82,28 @@ export async function searchPlaces(
 
   return out;
 }
+
+// Reverse geocode a dropped pin → nearest named place + full address.
+export async function reverseGeocode(
+  lat: number,
+  lon: number
+): Promise<GeoResult | null> {
+  try {
+    const url = `https://photon.komoot.io/reverse?lat=${lat}&lon=${lon}&lang=en`;
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const data = (await res.json()) as { features?: PhotonFeature[] };
+    const f = data.features?.[0];
+    if (!f) return null;
+    const p = f.properties;
+    const detail = buildAddress(p);
+    const name = p.name ?? p.street ?? (detail || "Pinned location");
+    const kind =
+      p.osm_key === "leisure" || (p.osm_value && PARK_VALUES.has(p.osm_value))
+        ? "park"
+        : "place";
+    return { label: name, detail: detail || undefined, lat, lon, kind };
+  } catch {
+    return null;
+  }
+}

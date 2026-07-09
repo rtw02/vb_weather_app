@@ -1,9 +1,13 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import { searchPlaces, type GeoResult } from "@/lib/geocode";
 import type { SavedLocation } from "@/lib/locations";
 import { makeId } from "@/lib/locations";
+
+// Lazy-load the map (Leaflet) only when opened — keeps it out of the main bundle.
+const MapPicker = dynamic(() => import("./MapPicker"), { ssr: false });
 
 const focusRing =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-1";
@@ -22,6 +26,7 @@ export default function AddLocationBar({
   const [noResults, setNoResults] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [active, setActive] = useState(-1); // keyboard-highlighted option
+  const [mapOpen, setMapOpen] = useState(false);
   const boxRef = useRef<HTMLDivElement>(null);
   const listId = useId();
 
@@ -203,9 +208,27 @@ export default function AddLocationBar({
           {error}
         </p>
       )}
-      <p className="mt-2 text-[11px] text-slate-500">
-        Places © OpenStreetMap contributors
-      </p>
+
+      <div className="mt-2 flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setMapOpen(true)}
+          className={`inline-flex min-h-[36px] items-center rounded-md px-2 text-xs font-medium text-sky-700 hover:bg-sky-500/10 ${focusRing}`}
+        >
+          📌 Can’t find it? Drop a pin on the map
+        </button>
+        <span className="text-[11px] text-slate-500">
+          Places © OpenStreetMap
+        </span>
+      </div>
+
+      {mapOpen && (
+        <MapPicker
+          initial={biasTo}
+          onAdd={onAdd}
+          onClose={() => setMapOpen(false)}
+        />
+      )}
     </div>
   );
 }
