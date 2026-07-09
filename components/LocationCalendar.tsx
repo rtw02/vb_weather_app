@@ -134,11 +134,16 @@ export default function LocationCalendar({
 
   return (
     <section className="animate-fade-in-up rounded-2xl border border-white/70 bg-white/55 p-4 shadow-lg shadow-sky-900/5 backdrop-blur-md transition-colors hover:border-white">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-base font-semibold text-slate-800">
-          <span className="text-sky-600">📍</span>
-          {location.label}
-        </h2>
+      <div className="mb-3 flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="flex items-center gap-2 text-base font-semibold text-slate-800">
+            <span className="text-sky-600">📍</span>
+            <span className="truncate">{location.label}</span>
+          </h2>
+          {location.detail && (
+            <p className="ml-6 mt-0.5 text-xs text-slate-500">{location.detail}</p>
+          )}
+        </div>
         <div className="flex items-center gap-1">
           <button
             type="button"

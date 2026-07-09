@@ -10,8 +10,10 @@ const focusRing =
 
 export default function AddLocationBar({
   onAdd,
+  biasTo,
 }: {
   onAdd: (loc: SavedLocation) => void;
+  biasTo?: { lat: number; lon: number };
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<GeoResult[]>([]);
@@ -35,7 +37,7 @@ export default function AddLocationBar({
     setBusy(true);
     const t = setTimeout(async () => {
       try {
-        const r = await searchPlaces(q);
+        const r = await searchPlaces(q, biasTo);
         if (!cancelled) {
           setResults(r);
           setNoResults(r.length === 0);
@@ -52,7 +54,7 @@ export default function AddLocationBar({
       cancelled = true;
       clearTimeout(t);
     };
-  }, [query]);
+  }, [query, biasTo?.lat, biasTo?.lon]);
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
@@ -72,7 +74,7 @@ export default function AddLocationBar({
   }
 
   function addResult(r: GeoResult) {
-    add({ id: makeId(), label: r.label, lat: r.lat, lon: r.lon });
+    add({ id: makeId(), label: r.label, lat: r.lat, lon: r.lon, detail: r.detail });
   }
 
   function onKeyDown(e: React.KeyboardEvent) {
@@ -120,19 +122,19 @@ export default function AddLocationBar({
 
   return (
     <div className="relative z-30 rounded-2xl border border-white/70 bg-white/55 p-4 shadow-lg shadow-sky-900/5 backdrop-blur-md">
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-center">
         <button
           type="button"
           onClick={useMyLocation}
           disabled={busy}
-          className={`inline-flex min-h-[44px] items-center rounded-lg bg-sky-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-500 disabled:opacity-50 ${focusRing}`}
+          className={`inline-flex min-h-[44px] w-full items-center justify-center rounded-lg bg-sky-600 px-4 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-sky-500 disabled:opacity-50 sm:w-auto sm:justify-start ${focusRing}`}
         >
           📍 Use my location
         </button>
 
-        <div ref={boxRef} className="relative min-w-[180px] flex-1">
+        <div ref={boxRef} className="relative w-full sm:flex-1">
           <label htmlFor="city-search" className="sr-only">
-            Search for a city
+            Search for a park, court, or city
           </label>
           <input
             id="city-search"
@@ -175,12 +177,12 @@ export default function AddLocationBar({
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-medium">{r.label}</span>
                       {r.detail && (
-                        <span className="block truncate text-xs text-slate-400">
+                        <span className="line-clamp-2 block text-xs text-slate-400">
                           {r.detail}
                         </span>
                       )}
                     </span>
-                    <span className="shrink-0 text-xs tabular-nums text-slate-400">
+                    <span className="hidden shrink-0 text-xs tabular-nums text-slate-400 sm:block">
                       {r.lat.toFixed(2)}, {r.lon.toFixed(2)}
                     </span>
                   </button>

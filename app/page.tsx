@@ -121,7 +121,7 @@ export default function Home() {
     <main className="relative mx-auto max-w-2xl px-4 pb-[36vh] pt-8">
       <SceneBackground phase={phase} mood={mood} court={court} ballRain={ballRain} />
 
-      <div className="mb-4 flex justify-end gap-2">
+      <div className="mb-4 flex flex-wrap justify-end gap-2">
         <button type="button" onClick={() => setSettingsOpen((o) => !o)} className={chip}>
           ⚙️ Settings
         </button>
@@ -158,7 +158,10 @@ export default function Home() {
       </header>
 
       <div className="space-y-4">
-        <AddLocationBar onAdd={addLocation} />
+        <AddLocationBar
+          onAdd={addLocation}
+          biasTo={locations[0] ? { lat: locations[0].lat, lon: locations[0].lon } : undefined}
+        />
 
         {topSpot?.best && (
           <div className="animate-fade-in-up rounded-xl border border-amber-200/70 bg-amber-50/80 px-4 py-2 text-sm font-medium text-amber-800 backdrop-blur-sm">

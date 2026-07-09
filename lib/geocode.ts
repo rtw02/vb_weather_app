@@ -14,13 +14,25 @@ interface PhotonFeature {
   properties: {
     name?: string;
     street?: string;
+    locality?: string;
+    district?: string;
     city?: string;
     county?: string;
     state?: string;
+    postcode?: string;
     country?: string;
     osm_key?: string;
     osm_value?: string;
   };
+}
+
+// Full, human-readable address from most-specific → general, de-duplicated.
+function buildAddress(p: PhotonFeature["properties"]): string {
+  const locality = p.city ?? p.locality ?? p.district ?? p.county;
+  const state = p.postcode ? `${p.state ?? ""} ${p.postcode}`.trim() : p.state;
+  const parts = [p.street, locality, state, p.country].filter(Boolean) as string[];
+  // Drop consecutive duplicates (e.g. city === county).
+  return parts.filter((v, i) => v !== parts[i - 1]).join(", ");
 }
 
 const PARK_VALUES = new Set([
@@ -33,11 +45,15 @@ const PARK_VALUES = new Set([
   "stadium",
 ]);
 
-export async function searchPlaces(query: string): Promise<GeoResult[]> {
+export async function searchPlaces(
+  query: string,
+  bias?: { lat: number; lon: number }
+): Promise<GeoResult[]> {
   const q = query.trim();
   if (!q) return [];
 
-  const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6&lang=en`;
+  let url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=6&lang=en`;
+  if (bias) url += `&lat=${bias.lat}&lon=${bias.lon}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Place search failed (${res.status})`);
   const data = (await res.json()) as { features?: PhotonFeature[] };
@@ -48,9 +64,7 @@ export async function searchPlaces(query: string): Promise<GeoResult[]> {
   for (const f of data.features ?? []) {
     const p = f.properties;
     const [lon, lat] = f.geometry.coordinates; // GeoJSON: [lon, lat]
-    const detail = [p.city ?? p.county ?? p.state, p.country]
-      .filter(Boolean)
-      .join(", ");
+    const detail = buildAddress(p);
     const name = p.name ?? p.street ?? detail;
     if (!name) continue;
 

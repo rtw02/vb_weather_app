@@ -5,6 +5,7 @@ export interface SavedLocation {
   label: string;
   lat: number;
   lon: number;
+  detail?: string; // full address, for verifying the right spot
 }
 
 const KEY = "vb-weather-locations";
