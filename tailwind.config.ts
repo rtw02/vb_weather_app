@@ -60,6 +60,21 @@ const config: Config = {
           "0%, 100%": { transform: "translateY(0)" },
           "50%": { transform: "translateY(-6px)" },
         },
+        floaty: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "50%": { transform: "translateY(-16px)" },
+        },
+        bounceUp: {
+          "0%": { transform: "translateY(0)" },
+          "40%": { transform: "translateY(-120px)" },
+          "100%": { transform: "translateY(0)" },
+        },
+        celebrate: {
+          "0%, 100%": { transform: "translateY(0)" },
+          "25%": { transform: "translateY(-16px)" },
+          "55%": { transform: "translateY(-4px)" },
+          "78%": { transform: "translateY(-12px)" },
+        },
         rain: {
           "0%": { transform: "translateY(-10vh)" },
           "100%": { transform: "translateY(110vh)" },
@@ -82,6 +97,9 @@ const config: Config = {
         twinkle: "twinkle 3s ease-in-out infinite",
         sway: "sway 6s ease-in-out infinite",
         "sway-slow": "swaySlow 9s ease-in-out infinite",
+        floaty: "floaty 3.2s ease-in-out infinite",
+        "bounce-up": "bounceUp 0.75s cubic-bezier(0.3,0,0.3,1) both",
+        celebrate: "celebrate 0.6s ease-in-out infinite",
         arc: "arc 9s ease-in-out infinite",
         flap: "flap 1.3s ease-in-out infinite",
         bob: "bob 1.1s ease-in-out infinite",

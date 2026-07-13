@@ -17,6 +17,7 @@ import AddLocationBar from "@/components/AddLocationBar";
 import LocationCalendar from "@/components/LocationCalendar";
 import SettingsPanel from "@/components/SettingsPanel";
 import Legend from "@/components/Legend";
+import CourtGame from "@/components/CourtGame";
 import SceneBackground, { type Court } from "@/components/SceneBackground";
 import { useEstPhase } from "@/hooks/useEstPhase";
 import { prettyDay, type Mood } from "@/lib/funstats";
@@ -189,6 +190,8 @@ export default function Home() {
         <div className="rounded-2xl border border-white/60 bg-white/40 p-4 shadow-sm backdrop-blur-sm">
           <Legend />
         </div>
+
+        <CourtGame />
       </div>
     </main>
   );
