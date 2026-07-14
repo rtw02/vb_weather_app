@@ -19,16 +19,20 @@ const NET_BOTTOM = 138;
 const SERVE_DUR = 1400; // ms the serve is in the air (bigger = easier pass timing)
 const PASS_GREEN: [number, number] = [40, 96]; // wide, generous timing window (%)
 
-// NBA-2K-style spike meter: the green zone is randomized each attempt and every
-// tap adds a random amount — you must STOP with your fill inside the green
-// (overshoot = brick). No decay: control it by when you stop tapping.
-const CHARGE_MS = 2200; // time before the shot auto-releases
-const TAP_MIN = 6; // min power per tap
-const TAP_MAX = 19; // max power per tap
-const ZONE_MIN = 40; // green zone can start anywhere in [ZONE_MIN, ZONE_MAX-ish]
-const ZONE_MAX = 74;
-const ZONE_W_MIN = 12; // green zone width range
-const ZONE_W_MAX = 20;
+// Spike meter: the green zone is randomized each attempt. Each tap raises the
+// fill a fixed amount; stop tapping and it drains back down. Balance your taps
+// to hold the fill in the green when it auto-releases.
+const CHARGE_MS = 3500; // time before the shot auto-releases
+const TAP_GAIN = 8; // base power per tap
+const TAP_RAMP = 2.2; // extra power per consecutive tap (builds momentum)
+const TAP_CAP = 26; // max power a single tap can add
+const COMBO_MS = 1100; // taps within this gap keep the combo going (≈1/sec is fine)
+const DECAY = 0.006; // slow drain — a tap every ~second still charges it up
+const ZONE_MIN = 42; // green zone can start anywhere in [ZONE_MIN, ZONE_MAX]
+const ZONE_MAX = 70;
+const ZONE_W_MIN = 8; // green (kill) zone width range
+const ZONE_W_MAX = 12;
+const YELLOW_M = 13; // yellow (dug) margin on each side of the green
 
 type Side = "left" | "right";
 type Strk = "Ls" | "Lh" | "Rs" | "Rh" | null;
@@ -60,6 +64,8 @@ export default function CourtGame() {
   const paused = useRef(false);
   const meterRef = useRef<Meter>(null);
   const power = useRef(0);
+  const combo = useRef(0); // consecutive fast taps
+  const lastTap = useRef(0);
   const zone = useRef<[number, number]>([60, 78]); // random green zone this spike
   const markerVal = useRef(0);
   const passClaimed = useRef(false);
@@ -162,15 +168,13 @@ export default function CourtGame() {
   }
 
   // --- rally flow ------------------------------------------------------------
-  function cpuServe() {
+  // Ball comes over to your side; you time the pass, then set + spike.
+  function receive(from: Pt, hitter: Strk) {
     running.current = true;
     passClaimed.current = false;
-    setMsg(null);
-    place(P.right.hit.x, P.right.hit.y);
     setMeter("pass");
     startPassMarker(SERVE_DUR);
-    // serve arcs over to your backrow; click while the marker is in the green.
-    arc(P.right.hit, P.left.hit, 92, SERVE_DUR, back("right"), () => {
+    arc(from, P.left.hit, 92, SERVE_DUR, hitter, () => {
       stopMarker();
       setMeter(null);
       if (passClaimed.current) {
@@ -182,6 +186,12 @@ export default function CourtGame() {
         shank(P.left.hit); // never hit the green
       }
     });
+  }
+
+  function cpuServe() {
+    setMsg(null);
+    place(P.right.hit.x, P.right.hit.y);
+    receive(P.right.hit, back("right"));
   }
 
   // Bad taps don't penalise — you can keep trying until the marker leaves green.
@@ -198,6 +208,8 @@ export default function CourtGame() {
   function startCharge() {
     if (!running.current) return;
     power.current = 0;
+    combo.current = 0;
+    lastTap.current = 0;
     setPowerPct(0);
     // new random green zone each spike
     const lo = ZONE_MIN + Math.random() * (ZONE_MAX - ZONE_MIN);
@@ -216,7 +228,11 @@ export default function CourtGame() {
         craf.current = requestAnimationFrame(loop);
         return;
       }
+      const dt = now - prev;
       prev = now;
+      // drain toward 0 while you're not tapping
+      power.current = clamp(power.current - DECAY * dt, 0, 100);
+      setPowerPct(power.current);
       if (now - startT >= CHARGE_MS) {
         resolveSpike();
         return;
@@ -227,8 +243,11 @@ export default function CourtGame() {
   }
 
   function addPower() {
-    // each tap adds a different amount (2K-style randomness)
-    const gain = TAP_MIN + Math.random() * (TAP_MAX - TAP_MIN);
+    // rapid consecutive taps build a combo → each tap adds more.
+    const now = performance.now();
+    combo.current = now - lastTap.current < COMBO_MS ? combo.current + 1 : 0;
+    lastTap.current = now;
+    const gain = Math.min(TAP_GAIN + combo.current * TAP_RAMP, TAP_CAP);
     power.current = clamp(power.current + gain, 0, 100);
     setPowerPct(power.current);
   }
@@ -240,9 +259,11 @@ export default function CourtGame() {
     if (p >= lo && p <= hi) {
       const center = (lo + hi) / 2;
       const perfect = Math.abs(p - center) <= (hi - lo) * 0.28; // dead-center
-      doKill(perfect);
+      doKill(perfect); // green → hits the ground
+    } else if (p >= lo - YELLOW_M && p <= hi + YELLOW_M) {
+      dugRally(); // yellow → the CPU passer digs it up
     } else {
-      netMiss(); // short or overshot → brick
+      netMiss(); // way off → into the net
     }
   }
 
@@ -267,6 +288,23 @@ export default function CourtGame() {
         flash("RALLY LOST");
         celebrateThenServe("right");
       });
+    });
+  }
+
+  // Yellow: decent spike, but the CPU digs it and plays out their side, then
+  // attacks back over — you have to pass and spike again (rally continues).
+  function dugRally() {
+    flash("DUG!");
+    // 1. your spike crosses to the CPU backrow, who digs it up
+    arc(P.left.hit, P.right.hit, 88, 560, back("left"), () => {
+      // 2. CPU backrow passes to its setter
+      arc(P.right.hit, P.right.set, 48, 440, back("right"), () =>
+        // 3. CPU setter sets it back
+        arc(P.right.set, P.right.hit, 54, 440, front("right"), () =>
+          // 4. CPU backrow attacks over → you receive again
+          receive(P.right.hit, back("right"))
+        )
+      );
     });
   }
 
@@ -393,9 +431,17 @@ export default function CourtGame() {
       {meter === "spike" && !isPaused && (
         <div className="mb-2 cursor-pointer" onClick={addPower}>
           <div className="relative h-5 w-full overflow-hidden rounded-full bg-slate-300/70 ring-1 ring-white/60">
-            {/* randomized green zone (moves every spike) */}
+            {/* yellow (dug) band around the green (moves every spike) */}
             <div
-              className="absolute inset-y-0 border-x-2 border-green-600/80 bg-green-500/30"
+              className="absolute inset-y-0 bg-amber-400/35"
+              style={{
+                left: `${Math.max(0, zonePct[0] - YELLOW_M)}%`,
+                width: `${Math.min(100, zonePct[1] + YELLOW_M) - Math.max(0, zonePct[0] - YELLOW_M)}%`,
+              }}
+            />
+            {/* green (kill) zone */}
+            <div
+              className="absolute inset-y-0 border-x-2 border-green-600/80 bg-green-500/45"
               style={{ left: `${zonePct[0]}%`, width: `${zonePct[1] - zonePct[0]}%` }}
             />
             {/* your fill */}
@@ -405,7 +451,7 @@ export default function CourtGame() {
             />
           </div>
           <p className="mt-1 text-center text-[11px] font-bold text-slate-700">
-            stop your fill in the green — it moves every time 🔥
+            tap to raise, stop to drop · green = KILL 🔥 · yellow = dug
           </p>
         </div>
       )}
@@ -433,7 +479,11 @@ export default function CourtGame() {
           <div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center">
             <span
               className={`animate-pop-in rounded-full px-5 py-1.5 font-display text-xl font-extrabold text-white shadow-lg ${
-                msg.includes("LOST") ? "bg-rose-600" : "bg-emerald-600"
+                msg.includes("LOST")
+                  ? "bg-rose-600"
+                  : msg.includes("DUG")
+                  ? "bg-amber-500"
+                  : "bg-emerald-600"
               }`}
             >
               {msg}
@@ -480,6 +530,17 @@ export default function CourtGame() {
           <rect x={NET_X - 6} y={NET_TOP + 4} width={12} height={NET_BOTTOM - NET_TOP} fill="url(#netMeshCourt)" />
           <rect x={NET_X - 7} y={NET_TOP} width={14} height={5} rx={1.5} fill="#ffffff" opacity={0.92} />
           <rect x={NET_X - 6} y={NET_BOTTOM} width={12} height={2.5} fill="#ffffff" opacity={0.7} />
+
+          {/* persistent "YOU" tag over your character (left backrow) */}
+          {playing && (
+            <g transform={`translate(${P.left.hitBase} 86)`}>
+              <rect x={-14} y={-9} width={28} height={13} rx={6.5} fill="#059669" />
+              <text x={0} y={0} textAnchor="middle" dominantBaseline="central" fontSize={8} fontWeight={800} fill="#ffffff">
+                YOU
+              </text>
+              <path d="M-4 4 L4 4 L0 9 Z" fill="#059669" />
+            </g>
+          )}
 
           {/* diamond over the player you're acting for */}
           {(meter === "pass" || meter === "spike") && (
